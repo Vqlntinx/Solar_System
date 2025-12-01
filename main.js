@@ -159,6 +159,11 @@ function initWebGL() {
 
     gl.enable(gl.DEPTH_TEST);
 
+    let focusTarget = 'sun';
+    initFocusControls((target) => {
+        focusTarget = target;
+    });
+
     let lastTime = 0;
 
     function render(now) {
@@ -179,13 +184,37 @@ function initWebGL() {
         const projection = mat4.create();
         mat4.perspective(projection, 45 * Math.PI / 180, aspect, 0.1, 200.0);
 
-        // 카메라 위치 (태양이 원점)
-        const eye = [
+        // 궤도 및 위치 계산
+        const earthOrbitRadius = 12.0;
+        const earthOrbitSpeed  = 0.4;
+        const earthAngle = now * earthOrbitSpeed;
+        const earthPos = [
+            Math.cos(earthAngle) * earthOrbitRadius,
+            0,
+            Math.sin(earthAngle) * earthOrbitRadius
+        ];
+
+        const moonOrbitRadius = 3.5;
+        const moonOrbitSpeed  = 1.2;
+        const moonAngle = now * moonOrbitSpeed;
+        const moonPos = [
+            earthPos[0] + Math.cos(moonAngle) * moonOrbitRadius,
+            earthPos[1] + Math.sin(moonAngle * 0.3) * 0.6,
+            earthPos[2] + Math.sin(moonAngle) * moonOrbitRadius
+        ];
+
+        const focusPosition = getFocusPosition(focusTarget, earthPos, moonPos);
+        const orbitOffset = [
             camRadius * Math.cos(camPitch) * Math.sin(camYaw),
             camRadius * Math.sin(camPitch),
             camRadius * Math.cos(camPitch) * Math.cos(camYaw)
         ];
-        const center = [0, 0, 0];
+        const eye = [
+            focusPosition[0] + orbitOffset[0],
+            focusPosition[1] + orbitOffset[1],
+            focusPosition[2] + orbitOffset[2]
+        ];
+        const center = focusPosition;
         const up = [0, 1, 0];
 
         const view = mat4.create();
@@ -217,16 +246,6 @@ function initWebGL() {
         }
 
         // ===== 2) 지구 (태양 주위를 공전) =====
-        const earthOrbitRadius = 12.0;
-        const earthOrbitSpeed  = 0.4; // rad/sec
-        const earthAngle = now * earthOrbitSpeed;
-
-        const earthPos = [
-            Math.cos(earthAngle) * earthOrbitRadius,
-            0,
-            Math.sin(earthAngle) * earthOrbitRadius
-        ];
-
         {
             const model = mat4.create();
             mat4.translate(model, model, earthPos);
@@ -244,16 +263,6 @@ function initWebGL() {
         }
 
         // ===== 3) 달 (지구 주위를 공전) =====
-        const moonOrbitRadius = 3.5;
-        const moonOrbitSpeed  = 1.2; // 지구보다 빠르게
-        const moonAngle = now * moonOrbitSpeed;
-
-        const moonPos = [
-            earthPos[0] + Math.cos(moonAngle) * moonOrbitRadius,
-            earthPos[1] + Math.sin(moonAngle * 0.3) * 0.6, // 살짝 위아래도 움직이게
-            earthPos[2] + Math.sin(moonAngle) * moonOrbitRadius
-        ];
-
         {
             const model = mat4.create();
             mat4.translate(model, model, moonPos);
@@ -500,6 +509,39 @@ function initMouseControls(canvas, onDrag, onWheel) {
         e.preventDefault();
         onWheel(e.deltaY);
     }, { passive: false });
+}
+
+// =======================
+//  시점 전환 컨트롤
+// =======================
+
+function initFocusControls(onChange) {
+    const buttons = document.querySelectorAll('[data-focus-target]');
+    if (!buttons.length) return;
+
+    const activate = (target) => {
+        buttons.forEach((btn) => {
+            const isActive = btn.dataset.focusTarget === target;
+            btn.classList.toggle('active', isActive);
+        });
+    };
+
+    buttons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.focusTarget;
+            if (!target) return;
+            onChange(target);
+            activate(target);
+        });
+    });
+
+    activate('sun');
+}
+
+function getFocusPosition(target, earthPos, moonPos) {
+    if (target === 'earth') return earthPos;
+    if (target === 'moon') return moonPos;
+    return [0, 0, 0];
 }
 
 // =======================
