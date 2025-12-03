@@ -25,7 +25,7 @@ void main() {
 }
 `;
 
-// 스카이박스용 쉐이더 (간단한 텍스처 표시만)
+// Skybox Shader
 const skyboxVsSource = `
 attribute vec3 aPosition;
 attribute vec2 aTexCoord;
@@ -36,7 +36,7 @@ uniform mat4 uProjection;
 varying vec2 vTexCoord;
 
 void main() {
-    // 카메라 위치를 원점으로 하는 뷰 행렬 (이동 제거)
+    // 카메라 위치를 원점으로 하는 뷰 행렬
     mat4 viewNoTranslation = uView;
     viewNoTranslation[3] = vec4(0.0, 0.0, 0.0, 1.0);
     
@@ -545,7 +545,7 @@ function loadTexture(gl, url) {
     const border = 0;
     const srcFormat = gl.RGBA;
     const srcType = gl.UNSIGNED_BYTE;
-    const pixel = new Uint8Array([255, 255, 255, 255]); // 밝은 흰색으로 초기화
+    const pixel = new Uint8Array([5, 5, 15, 255]);
     gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
         width, height, border, srcFormat, srcType, pixel);
 
