@@ -25,6 +25,40 @@ void main() {
 }
 `;
 
+// 스카이박스용 쉐이더 (간단한 텍스처 표시만)
+const skyboxVsSource = `
+attribute vec3 aPosition;
+attribute vec2 aTexCoord;
+
+uniform mat4 uView;
+uniform mat4 uProjection;
+
+varying vec2 vTexCoord;
+
+void main() {
+    // 카메라 위치를 원점으로 하는 뷰 행렬 (이동 제거)
+    mat4 viewNoTranslation = uView;
+    viewNoTranslation[3] = vec4(0.0, 0.0, 0.0, 1.0);
+    
+    vec4 pos = uProjection * viewNoTranslation * vec4(aPosition, 1.0);
+    // 깊이를 최대값으로 설정하여 항상 배경에 그려지도록
+    gl_Position = vec4(pos.xy, pos.w, pos.w);
+    vTexCoord = aTexCoord;
+}
+`;
+
+const skyboxFsSource = `
+precision mediump float;
+
+varying vec2 vTexCoord;
+
+uniform sampler2D uSampler;
+
+void main() {
+    gl_FragColor = texture2D(uSampler, vTexCoord);
+}
+`;
+
 const fsSource = `
 precision mediump float;
 
@@ -34,7 +68,7 @@ varying vec2 vTexCoord;
 
 uniform vec3 uViewPos;
 
-// 🔆 태양 위치 (점광원)
+// 태양 위치 (점광원)
 uniform vec3 uLightPos;
 uniform vec3 uLightColor;
 
@@ -52,7 +86,7 @@ void main() {
         baseColor = vec4(uObjectColor, 1.0);
     }
 
-    // 태양처럼 자체 발광하는 경우 조명 계산 건너뛰기
+    // 발광하는 경우 조명 계산 건너뛰기
     if (uIsEmissive) {
         // 텍스처가 없거나 어두우면 objectColor 사용, 있으면 밝게
         vec3 finalColor;
@@ -134,13 +168,32 @@ function initWebGL() {
         }
     };
 
+    // 스카이박스용 쉐이더 프로그램
+    const skyboxShaderProgram = initShaderProgram(gl, skyboxVsSource, skyboxFsSource);
+    const skyboxProgramInfo = {
+        program: skyboxShaderProgram,
+        attribLocations: {
+            position: gl.getAttribLocation(skyboxShaderProgram, 'aPosition'),
+            texCoord: gl.getAttribLocation(skyboxShaderProgram, 'aTexCoord'),
+        },
+        uniformLocations: {
+            view:       gl.getUniformLocation(skyboxShaderProgram, 'uView'),
+            projection: gl.getUniformLocation(skyboxShaderProgram, 'uProjection'),
+            sampler:    gl.getUniformLocation(skyboxShaderProgram, 'uSampler'),
+        }
+    };
+
     // 구 지오메트리 (태양, 지구, 달 모두 사용)
     const sphere = initSphereBuffers(gl, 32, 32); // latBands, lonBands
+    
+    // 스카이박스용 큰 구체 (안쪽에서 보이도록, 더 세밀하게)
+    const skyboxSphere = initSkyboxSphereBuffers(gl, 64, 64);
 
     // 텍스처 로딩
     const earthTex = loadTexture(gl, 'textures/earth.jpg');
     const sunTex   = loadTexture(gl, 'textures/sun.jpg');   // 없으면 기본 회색
     const moonTex  = loadTexture(gl, 'textures/moon.jpg');  // 없으면 기본 회색
+    const skyboxTex = loadTexture(gl, 'textures/skybox.jpg'); // 스카이박스 이미지
 
     // 카메라 (orbit)
     let camRadius = 25.0;
@@ -174,8 +227,8 @@ function initWebGL() {
         resizeCanvasToDisplaySize(gl.canvas);
         gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
-        // 우주 느낌 배경 색
-        gl.clearColor(0.01, 0.01, 0.04, 1.0);
+        // 배경 색 (검은색)
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         gl.useProgram(programInfo.program);
@@ -219,6 +272,36 @@ function initWebGL() {
 
         const view = mat4.create();
         mat4.lookAt(view, eye, center, up);
+
+        // ===== 스카이박스 렌더링 (먼저 그려서 배경에 표시) =====
+        if (skyboxTex) {
+            gl.disable(gl.DEPTH_TEST); // 깊이 테스트 비활성화
+            gl.depthMask(false); // 깊이 버퍼에 쓰기 비활성화
+            gl.useProgram(skyboxProgramInfo.program);
+            
+            gl.uniformMatrix4fv(skyboxProgramInfo.uniformLocations.view, false, view);
+            gl.uniformMatrix4fv(skyboxProgramInfo.uniformLocations.projection, false, projection);
+            
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, skyboxTex);
+            gl.uniform1i(skyboxProgramInfo.uniformLocations.sampler, 0);
+            
+            // 버퍼 바인딩
+            gl.bindBuffer(gl.ARRAY_BUFFER, skyboxSphere.position);
+            gl.vertexAttribPointer(skyboxProgramInfo.attribLocations.position, 3, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(skyboxProgramInfo.attribLocations.position);
+            
+            gl.bindBuffer(gl.ARRAY_BUFFER, skyboxSphere.texCoord);
+            gl.vertexAttribPointer(skyboxProgramInfo.attribLocations.texCoord, 2, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(skyboxProgramInfo.attribLocations.texCoord);
+            
+            gl.drawArrays(gl.TRIANGLES, 0, skyboxSphere.vertexCount);
+            
+            gl.depthMask(true); // 깊이 버퍼에 쓰기 다시 활성화
+            gl.enable(gl.DEPTH_TEST); // 깊이 테스트 다시 활성화
+        }
+
+        gl.useProgram(programInfo.program);
 
         gl.uniformMatrix4fv(programInfo.uniformLocations.view, false, view);
         gl.uniformMatrix4fv(programInfo.uniformLocations.projection, false, projection);
@@ -287,6 +370,62 @@ function initWebGL() {
 // =======================
 //  Sphere Geometry
 // =======================
+
+// 스카이박스용 구체 (안쪽에서 보이도록 텍스처 좌표 반전)
+function initSkyboxSphereBuffers(gl, latBands, lonBands) {
+    const positions = [];
+    const texCoords = [];
+
+    for (let lat = 0; lat < latBands; lat++) {
+        const theta1 = (lat    / latBands) * Math.PI;
+        const theta2 = ((lat+1)/ latBands) * Math.PI;
+
+        const sin1 = Math.sin(theta1);
+        const cos1 = Math.cos(theta1);
+        const sin2 = Math.sin(theta2);
+        const cos2 = Math.cos(theta2);
+
+        for (let lon = 0; lon < lonBands; lon++) {
+            const phi1 = (lon    / lonBands) * 2.0 * Math.PI;
+            const phi2 = ((lon+1)/ lonBands) * 2.0 * Math.PI;
+
+            const sinPhi1 = Math.sin(phi1);
+            const cosPhi1 = Math.cos(phi1);
+            const sinPhi2 = Math.sin(phi2);
+            const cosPhi2 = Math.cos(phi2);
+
+            // 네 점 (위쪽/아래쪽, 왼/오른) - 안쪽에서 보이도록
+            const p1 = [sin1 * cosPhi1, cos1, sin1 * sinPhi1];
+            const p2 = [sin2 * cosPhi1, cos2, sin2 * sinPhi1];
+            const p3 = [sin2 * cosPhi2, cos2, sin2 * sinPhi2];
+            const p4 = [sin1 * cosPhi2, cos1, sin1 * sinPhi2];
+
+            // 텍스처 좌표 (U 좌표 반전하여 안쪽에서 보이도록)
+            const uv1 = [1.0 - (lon    / lonBands), lat    / latBands];
+            const uv2 = [1.0 - (lon    / lonBands), (lat+1)/ latBands];
+            const uv3 = [1.0 - ((lon+1)/ lonBands), (lat+1)/ latBands];
+            const uv4 = [1.0 - ((lon+1)/ lonBands), lat    / latBands];
+
+            // 삼각형 두 개 (p1,p2,p3) (p1,p3,p4)
+            positions.push(...p1, ...p2, ...p3, ...p1, ...p3, ...p4);
+            texCoords.push(...uv1, ...uv2, ...uv3, ...uv1, ...uv3, ...uv4);
+        }
+    }
+
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+    const texCoordBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texCoords), gl.STATIC_DRAW);
+
+    return {
+        position: positionBuffer,
+        texCoord: texCoordBuffer,
+        vertexCount: positions.length / 3
+    };
+}
 
 function initSphereBuffers(gl, latBands, lonBands) {
     const positions = [];
