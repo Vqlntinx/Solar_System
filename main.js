@@ -41,7 +41,7 @@ void main() {
     viewNoTranslation[3] = vec4(0.0, 0.0, 0.0, 1.0);
     
     vec4 pos = uProjection * viewNoTranslation * vec4(aPosition, 1.0);
-    // 깊이를 최대값으로 설정하여 항상 배경에 그려지도록
+    // 깊이를 최대값으로 설정
     gl_Position = vec4(pos.xy, pos.w, pos.w);
     vTexCoord = aTexCoord;
 }
@@ -168,7 +168,7 @@ function initWebGL() {
         }
     };
 
-    // 스카이박스용 쉐이더 프로그램
+    // 스카이박스용 쉐이더
     const skyboxShaderProgram = initShaderProgram(gl, skyboxVsSource, skyboxFsSource);
     const skyboxProgramInfo = {
         program: skyboxShaderProgram,
@@ -184,18 +184,18 @@ function initWebGL() {
     };
 
     // 구 지오메트리 (태양, 지구, 달 모두 사용)
-    const sphere = initSphereBuffers(gl, 32, 32); // latBands, lonBands
+    const sphere = initSphereBuffers(gl, 32, 32);
     
     // 스카이박스용 큰 구체 (안쪽에서 보이도록, 더 세밀하게)
     const skyboxSphere = initSkyboxSphereBuffers(gl, 64, 64);
 
     // 텍스처 로딩
     const earthTex = loadTexture(gl, 'textures/earth.jpg');
-    const sunTex   = loadTexture(gl, 'textures/sun.jpg');   // 없으면 기본 회색
-    const moonTex  = loadTexture(gl, 'textures/moon.jpg');  // 없으면 기본 회색
+    const sunTex   = loadTexture(gl, 'textures/sun.jpg');
+    const moonTex  = loadTexture(gl, 'textures/moon.jpg');
     const skyboxTex = loadTexture(gl, 'textures/skybox.jpg'); // 스카이박스 이미지
 
-    // 카메라 (orbit)
+    // 카메라
     let camRadius = 25.0;
     let camYaw   = Math.PI / 4;
     let camPitch = 0.25;
@@ -315,7 +315,6 @@ function initWebGL() {
         // ===== 1) 태양 =====
         {
             const model = mat4.create();
-            // 태양을 살짝 자전시켜도 됨
             mat4.rotateY(model, model, now * 0.2);
             mat4.scale(model, model, [4.0, 4.0, 4.0]); // 가장 크게
 
@@ -324,7 +323,7 @@ function initWebGL() {
                 useTexture: true,        // 텍스처 사용 (sunTex 없으면 기본색)
                 texture: sunTex,
                 objectColor: [1.0, 0.9, 0.6], // 텍스처 없을 때 밝은 노란색
-                isEmissive: true         // 태양은 자체 발광
+                isEmissive: true         // 태양은 발광
             });
         }
 
@@ -338,7 +337,7 @@ function initWebGL() {
 
             drawObject(gl, programInfo, sphere, {
                 model,
-                useTexture: true,          // 지구는 텍스처 필수
+                useTexture: true,
                 texture: earthTex,
                 objectColor: [0.2, 0.4, 1.0],
                 isEmissive: false
@@ -354,7 +353,7 @@ function initWebGL() {
 
             drawObject(gl, programInfo, sphere, {
                 model,
-                useTexture: true,          // 달도 텍스처 있으면 좋고, 없으면 objectColor
+                useTexture: true,
                 texture: moonTex,
                 objectColor: [0.8, 0.8, 0.8],
                 isEmissive: false
@@ -549,7 +548,7 @@ function loadTexture(gl, url) {
     gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
         width, height, border, srcFormat, srcType, pixel);
 
-    // 텍스처 파라미터 설정 (중요!)
+    // 텍스처 파라미터 설정
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
